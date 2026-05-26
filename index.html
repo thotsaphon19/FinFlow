@@ -1440,84 +1440,72 @@ function renderSettings(){
               5️⃣ คัดลอก Web App URL มาวางด้านบน<br><br>
               ระบบจะสร้าง 3 Sheet อัตโนมัติ: <strong>FinFlow</strong> (รายการ) · <strong>Categories</strong> (หมวดหมู่) · <strong>Slips</strong> (สลิปรูป)<br><br>
               <strong>โค้ด Apps Script (รองรับสลิปรูปแบบ chunked base64):</strong><br>
-              <textarea readonly style="width:100%;height:220px;font-size:10px;font-family:monospace;background:var(--bg-solid);border:1px solid var(--border-2);border-radius:4px;padding:8px;color:var(--text);resize:vertical">const SHEET_TXN = 'FinFlow';
-const SHEET_CATS = 'Categories';
-const SHEET_SLIPS = 'Slips';
-const TXN_HEADERS = ['ID','วันที่','ประเภท','หมวดหมู่','จำนวน','หมายเหตุ','มีสลิป'];
-const CAT_HEADERS = ['ประเภท','emoji','ชื่อหมวดหมู่'];
-const SLIP_HEADERS = ['TxnID','ChunkIndex','Data'];
+              <textarea readonly style="width:100%;height:260px;font-size:10px;font-family:monospace;background:var(--bg-solid);border:1px solid var(--border-2);border-radius:4px;padding:8px;color:var(--text);resize:vertical">// FinFlow — Code.gs  (วางแทนที่โค้ดเดิมทั้งหมด แล้ว Deploy ใหม่)
+const SHEET_TXN='FinFlow', SHEET_CATS='Categories', SHEET_SLIPS='Slips';
+const TXN_HDR=['ID','วันที่','ประเภท','หมวดหมู่','จำนวน','หมายเหตุ','มีสลิป'];
+const CAT_HDR=['ประเภท','Emoji','ชื่อหมวดหมู่'];
+const SLIP_HDR=['TxnID','ChunkIndex','Data'];
 
-function getSheet(name, headers) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(name);
-  if (!sh) { sh = ss.insertSheet(name); sh.appendRow(headers); }
+function getSheet(name,hdr){
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  let sh=ss.getSheetByName(name);
+  if(!sh){sh=ss.insertSheet(name);sh.appendRow(hdr);}
   return sh;
 }
+function out(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}
 
-function doGet(e) {
-  const action = (e.parameter && e.parameter.action) || 'read';
-  if (action === 'read') {
-    const sh = getSheet(SHEET_TXN, TXN_HEADERS);
-    const rows = sh.getDataRange().getValues().slice(1).filter(r => r[0]);
+function doGet(e){
+  const a=(e&&e.parameter&&e.parameter.action)||'read';
+  if(a==='read'){
+    const rows=getSheet(SHEET_TXN,TXN_HDR).getDataRange().getValues().slice(1).filter(r=>r[0]!=='');
     return out(rows);
   }
-  if (action === 'readCats') {
-    const sh = getSheet(SHEET_CATS, CAT_HEADERS);
-    const rows = sh.getDataRange().getValues().slice(1).filter(r => r[0]);
+  if(a==='readCats'){
+    const rows=getSheet(SHEET_CATS,CAT_HDR).getDataRange().getValues().slice(1).filter(r=>r[0]!=='');
     return out(rows);
   }
-  if (action === 'readSlip') {
-    const id = e.parameter.id;
-    const sh = getSheet(SHEET_SLIPS, SLIP_HEADERS);
-    const rows = sh.getDataRange().getValues().slice(1)
-      .filter(r => String(r[0]) === String(id))
-      .sort((a, b) => Number(a[1]) - Number(b[1]));
-    if (!rows.length) return out({data:null});
-    const base64 = rows.map(r => r[2]).join('');
-    return out({data: base64});
+  if(a==='readSlip'){
+    const id=e.parameter.id;
+    const chunks=getSheet(SHEET_SLIPS,SLIP_HDR).getDataRange().getValues().slice(1)
+      .filter(r=>String(r[0])===String(id)).sort((a,b)=>Number(a[1])-Number(b[1]));
+    if(!chunks.length)return out({ok:true,data:null});
+    return out({ok:true,data:chunks.map(r=>String(r[2])).join('')});
   }
-  return out([]);
+  return out({ok:false,error:'unknown'});
 }
 
-function doPost(e) {
-  const payload = JSON.parse(e.postData.contents);
-
-  if (payload.action === 'writeCats') {
-    const sh = getSheet(SHEET_CATS, CAT_HEADERS);
-    sh.clearContents(); sh.appendRow(CAT_HEADERS);
-    if (payload.rows && payload.rows.length)
-      sh.getRange(2,1,payload.rows.length,payload.rows[0].length).setValues(payload.rows);
+function doPost(e){
+  const p=JSON.parse(e.postData.contents);
+  const a=p.action||'write';
+  if(a==='write'){
+    const sh=getSheet(SHEET_TXN,TXN_HDR);sh.clearContents();sh.appendRow(TXN_HDR);
+    if(p.rows&&p.rows.length)sh.getRange(2,1,p.rows.length,p.rows[0].length).setValues(p.rows);
     return out({ok:true});
   }
-
-  if (payload.action === 'writeSlip') {
-    const sh = getSheet(SHEET_SLIPS, SLIP_HEADERS);
-    // ลบ chunks เก่าของ id นี้ก่อน
-    const data = sh.getDataRange().getValues();
-    const toDelete = [];
-    for (let i = data.length - 1; i >= 1; i--) {
-      if (String(data[i][0]) === String(payload.id)) toDelete.push(i + 1);
-    }
-    toDelete.forEach(row => sh.deleteRow(row));
-    // เขียน chunks ใหม่
-    if (payload.chunks && payload.chunks.length) {
-      const newRows = payload.chunks.map((c, i) => [payload.id, i, c]);
-      sh.getRange(sh.getLastRow()+1, 1, newRows.length, 3).setValues(newRows);
-    }
+  if(a==='writeCats'){
+    const sh=getSheet(SHEET_CATS,CAT_HDR);sh.clearContents();sh.appendRow(CAT_HDR);
+    if(p.rows&&p.rows.length)sh.getRange(2,1,p.rows.length,p.rows[0].length).setValues(p.rows);
     return out({ok:true});
   }
-
-  // default: write transactions
-  const sh = getSheet(SHEET_TXN, TXN_HEADERS);
-  sh.clearContents(); sh.appendRow(TXN_HEADERS);
-  if (payload.rows && payload.rows.length)
-    sh.getRange(2,1,payload.rows.length,payload.rows[0].length).setValues(payload.rows);
-  return out({ok:true});
-}
-
-function out(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+  if(a==='writeSlip'){
+    if(!p.id)return out({ok:false,error:'missing id'});
+    const sh=getSheet(SHEET_SLIPS,SLIP_HDR);
+    const vals=sh.getDataRange().getValues();
+    for(let i=vals.length-1;i>=1;i--){if(String(vals[i][0])===String(p.id))sh.deleteRow(i+1);}
+    if(p.chunks&&p.chunks.length){
+      const rows=p.chunks.map((c,i)=>[String(p.id),i,c]);
+      sh.getRange(sh.getLastRow()+1,1,rows.length,3).setValues(rows);
+    }
+    return out({ok:true,chunks:(p.chunks||[]).length});
+  }
+  if(a==='deleteSlip'){
+    if(!p.id)return out({ok:false,error:'missing id'});
+    const sh=getSheet(SHEET_SLIPS,SLIP_HDR);
+    const vals=sh.getDataRange().getValues();
+    for(let i=vals.length-1;i>=1;i--){if(String(vals[i][0])===String(p.id))sh.deleteRow(i+1);}
+    return out({ok:true});
+  }
+  return out({ok:false,error:'unknown action'});
 }</textarea>
             </div>
           </details>
@@ -1626,13 +1614,16 @@ async function gsRequest(params){
     if(params.action==='read'||params.action==='readCats'){
       const res=await fetch(app.gs.webAppUrl+'?action='+params.action);
       return await res.json();
-    } else {
-      const res=await fetch(app.gs.webAppUrl,{
-        method:'POST',headers:{'Content-Type':'text/plain'},
-        body:JSON.stringify(params)
-      });
+    }
+    if(params.action==='readSlip'){
+      const res=await fetch(app.gs.webAppUrl+'?action=readSlip&id='+encodeURIComponent(params.id));
       return await res.json();
     }
+    const res=await fetch(app.gs.webAppUrl,{
+      method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify(params)
+    });
+    return await res.json();
   }catch(e){console.warn('GS:',e);return null}
 }
 
@@ -1642,7 +1633,9 @@ function txnToRow(t){
 }
 function rowToTxn(r){
   if(!r[0])return null;
-  return{id:Number(r[0]),date:r[1],type:r[2]==='รายรับ'?'income':'expense',category:r[3],amount:parseFloat(r[4])||0,note:r[5]||'',slipImg:null,_hasSlip:r[6]==='1'};
+  // Google Sheets อาจส่งกลับมาเป็น '1', 1, TRUE, หรือ 'TRUE'
+  const hasSlip = r[6]==='1' || r[6]===1 || r[6]===true || r[6]==='TRUE' || r[6]==='true';
+  return{id:Number(r[0]),date:r[1],type:r[2]==='รายรับ'?'income':'expense',category:r[3],amount:parseFloat(r[4])||0,note:r[5]||'',slipImg:null,_hasSlip:hasSlip};
 }
 
 // ── Push transactions (no slip data) ──
@@ -1673,16 +1666,19 @@ async function pullFromGS(){
   if(!Array.isArray(data))return false;
   const txns=data.map(rowToTxn).filter(Boolean);
 
-  // ดึงสลิปสำหรับรายการที่มีสลิป
+  // ดึงสลิปทีละรายการ พร้อม progress
   const withSlip=txns.filter(t=>t._hasSlip);
-  if(withSlip.length){
-    // ดึงทีละรายการ
-    for(const t of withSlip){
-      const res=await gsRequest({action:'readSlip',id:t.id});
-      if(res&&res.data)t.slipImg=res.data;
+  for(let i=0;i<withSlip.length;i++){
+    const t=withSlip[i];
+    // อัปเดต overlay progress
+    const ovl=document.getElementById('gsLoadingOverlay');
+    if(ovl){
+      const p=ovl.querySelector('p');
+      if(p)p.textContent=`กำลังโหลดสลิป ${i+1}/${withSlip.length}…`;
     }
+    const res=await gsRequest({action:'readSlip',id:t.id});
+    if(res&&res.data)t.slipImg=res.data;
   }
-  // ลบ _hasSlip ออก
   txns.forEach(t=>delete t._hasSlip);
   app.transactions=txns;
   save();return true;
