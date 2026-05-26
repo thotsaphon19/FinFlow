@@ -985,7 +985,7 @@ function renderOverview(){
             <td><span class="badge badge-${t.type}">${t.type==='income'?'💚 รายรับ':'❤️ รายจ่าย'}</span></td>
             <td>${getCatEmoji(t.type,t.category)} ${t.category}</td>
             <td style="color:var(--text-3);font-size:12px">${t.note||'—'}</td>
-            <td>${t.slipImg?`<img class="slip-thumb" src="${t.slipImg}" data-txnid="${t.id}" onclick="openLightboxById(this.dataset.txnid)" alt="สลิป">`:'<span class="no-slip">—</span>'}</td>
+            <td>${slipCell(t)}</td>
             <td class="amount-${t.type}" style="text-align:right">฿${fmtMoney(t.amount)}</td>
           </tr>`).join('')}</tbody>
         </table>
@@ -1200,7 +1200,7 @@ function applyFilter(){
     <td><span class="badge badge-${t.type}">${t.type==='income'?'💚 รายรับ':'❤️ รายจ่าย'}</span></td>
     <td>${getCatEmoji(t.type,t.category)} ${t.category}</td>
     <td style="color:var(--text-3);font-size:12px">${t.note||'—'}</td>
-    <td>${t.slipImg?`<img class="slip-thumb" src="${t.slipImg}" data-txnid="${t.id}" onclick="openLightboxById(this.dataset.txnid)" alt="สลิป">`:'<span class="no-slip">—</span>'}</td>
+    <td>${slipCell(t)}</td>
     <td class="amount-${t.type}" style="text-align:right">฿${fmtMoney(t.amount)}</td>
     <td><div class="tbl-actions">
       <button class="action-btn" onclick="editTxn(${t.id})" title="แก้ไข">✏️</button>
