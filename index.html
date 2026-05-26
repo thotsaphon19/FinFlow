@@ -2,7 +2,11 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1b1640">
 <title>FinFlow — ระบบบัญชีรายรับรายจ่าย</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -93,6 +97,7 @@ body {
 /* ─── Login ────────────────────────────────────── */
 #loginPage {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -271,7 +276,7 @@ body {
 .btn-logout:hover { color: rgba(255,255,255,.7); }
 
 /* ─── Main ─────────────────────────────────────── */
-.main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+.main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 .topbar {
   height: var(--topbar-h);
   background: var(--surface);
@@ -614,19 +619,127 @@ tbody tr:hover td { background: var(--surface2); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* ─── Responsive ───────────────────────────────── */
+
+/* Tablet & small desktop ≤ 1024px */
+@media (max-width: 1024px) {
+  :root { --sidebar-w: 200px; }
+  .stat-value { font-size: 18px; }
+}
+
+/* Tablet ≤ 900px — sidebar becomes drawer */
 @media (max-width: 900px) {
   :root { --sidebar-w: 0px; }
-  .sidebar { transform: translateX(-220px); width: 220px; }
+  .sidebar { transform: translateX(-220px); width: 220px; box-shadow: 4px 0 24px rgba(0,0,0,.3); }
   .sidebar.open { transform: translateX(0); }
-  .main { margin-left: 0; }
-  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .sidebar-overlay { display: block; }
+  .sidebar-overlay.visible { opacity: 1; pointer-events: all; }
+  .main { margin-left: 0; padding-bottom: 64px; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .chart-row { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
+  #menuToggle { display: inline-flex !important; }
+  /* bottom nav visible */
+  .bottom-nav { display: flex; }
+  /* hide export text on tablet topbar */
+  #exportExcelBtn span, #exportPdfBtn span { display: none; }
 }
+
+/* Mobile ≤ 600px */
 @media (max-width: 600px) {
-  .stat-grid { grid-template-columns: 1fr 1fr; }
-  .content { padding: 1rem; }
-  .topbar { padding: 0 1rem; }
+  :root { --topbar-h: 52px; }
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card { padding: .75rem .875rem; }
+  .stat-value { font-size: 16px; }
+  .stat-label { font-size: 10px; }
+  .content { padding: .75rem; }
+  .topbar { padding: 0 .75rem; }
+  .topbar-left h1 { font-size: 14px; }
+  /* hide export buttons — access via menu */
+  #exportExcelBtn, #exportPdfBtn { display: none !important; }
+  /* btn text hide on small topbar */
+  .btn-primary span { display: none; }
+  .btn-primary { padding: .45rem .6rem; }
+  /* table: hide note & date columns, keep essentials */
+  .tbl-col-note { display: none; }
+  .tbl-col-date { display: none; }
+  /* table rows more compact */
+  tbody td { padding: .5rem .6rem; font-size: 12px; }
+  thead th { padding: .5rem .6rem; }
+  /* card padding */
+  .card-body { padding: .875rem; }
+  .card-header { padding: .75rem .875rem; }
+  /* filter bar stacks */
+  .filter-bar { gap: 6px; padding: .6rem .75rem; }
+  .filter-bar select { flex: 1; min-width: 0; }
+  .filter-bar input[type="text"] { min-width: 0; width: 100%; }
+  /* form */
+  .form-group input, .form-group select, .form-group textarea { font-size: 16px; } /* prevent iOS zoom */
+  /* settings row stack */
+  .setting-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .setting-label { width: auto; }
+  .setting-input { width: 100%; }
+  /* toast bottom — above bottom nav */
+  #toastWrap { bottom: 74px; right: .75rem; left: .75rem; }
+  .toast { max-width: 100%; }
+  /* chart row gap */
+  .chart-row { gap: 8px; }
+  /* period tabs scroll */
+  .period-tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  .period-tab { flex-shrink: 0; }
+  /* login card */
+  .login-card { width: calc(100vw - 2rem); padding: 2rem 1.25rem; }
+}
+
+/* Very small ≤ 380px */
+@media (max-width: 380px) {
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-value { font-size: 15px; }
+  .content { padding: .5rem; }
+}
+
+/* ─── Bottom Navigation (mobile) ─────────────────── */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 60px;
+  background: var(--sidebar-bg);
+  border-top: 1px solid rgba(255,255,255,.07);
+  z-index: 200;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 .25rem;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.bn-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: rgba(255,255,255,.35);
+  cursor: pointer;
+  padding: .4rem .6rem;
+  border-radius: var(--r-sm);
+  transition: color .18s;
+  font-size: 9px;
+  font-weight: 500;
+  flex: 1;
+  max-width: 70px;
+}
+.bn-item i { font-size: 20px; }
+.bn-item.active { color: var(--brand); }
+.bn-item:active { background: rgba(255,255,255,.06); }
+
+/* ─── Sidebar overlay ─────────────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  z-index: 99;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
 }
 
 /* ─── Print ────────────────────────────────────── */
@@ -710,16 +823,28 @@ tbody tr:hover td { background: var(--surface2); }
           <h1 id="pageTitle">ภาพรวม</h1>
         </div>
         <div class="topbar-right">
-          <button class="btn" id="exportExcelBtn" onclick="exportExcel()" style="display:none"><i class="ti ti-file-spreadsheet"></i>Excel</button>
-          <button class="btn" id="exportPdfBtn" onclick="exportPDF()" style="display:none"><i class="ti ti-printer"></i>PDF</button>
+          <button class="btn" id="exportExcelBtn" onclick="exportExcel()" style="display:none"><i class="ti ti-file-spreadsheet"></i><span>Excel</span></button>
+          <button class="btn" id="exportPdfBtn" onclick="exportPDF()" style="display:none"><i class="ti ti-printer"></i><span>PDF</span></button>
           <button class="btn" onclick="toggleTheme()" title="เปลี่ยนธีม"><i class="ti ti-sun-moon"></i></button>
-          <button class="btn btn-primary" onclick="goAddNew()"><i class="ti ti-plus"></i>เพิ่มรายการ</button>
+          <button class="btn btn-primary" onclick="goAddNew()"><i class="ti ti-plus"></i><span>เพิ่มรายการ</span></button>
         </div>
       </header>
       <div class="content" id="pageContent"></div>
     </div>
   </div>
 </div>
+
+<!-- Sidebar overlay -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+<!-- Bottom Navigation (mobile) -->
+<nav class="bottom-nav" id="bottomNav">
+  <div class="bn-item active" data-page="overview" onclick="bnNav('overview')"><i class="ti ti-layout-dashboard"></i>ภาพรวม</div>
+  <div class="bn-item" data-page="add" onclick="bnNav('add')"><i class="ti ti-circle-plus"></i>เพิ่ม</div>
+  <div class="bn-item" data-page="transactions" onclick="bnNav('transactions')"><i class="ti ti-list-details"></i>รายการ</div>
+  <div class="bn-item" data-page="reports" onclick="bnNav('reports')"><i class="ti ti-chart-bar"></i>รายงาน</div>
+  <div class="bn-item" data-page="settings" onclick="bnNav('settings')"><i class="ti ti-settings"></i>ตั้งค่า</div>
+</nav>
 
 <!-- Toast -->
 <div id="toastWrap"></div>
@@ -899,15 +1024,39 @@ function renderPage(page) {
   app.page = page;
   document.getElementById('pageTitle').textContent = PAGE_TITLES[page] || page;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === page));
+  document.querySelectorAll('.bn-item').forEach(el => el.classList.toggle('active', el.dataset.page === page));
   const exportBtns = ['transactions', 'reports', 'overview'];
   document.getElementById('exportExcelBtn').style.display = exportBtns.includes(page) ? '' : 'none';
   document.getElementById('exportPdfBtn').style.display = exportBtns.includes(page) ? '' : 'none';
   const pages = { overview: renderOverview, add: renderAdd, transactions: renderTransactions, reports: renderReports, categories: renderCategories, settings: renderSettings };
   (pages[page] || renderOverview)();
+  // scroll to top on page change
+  const content = document.getElementById('pageContent');
+  if (content) content.scrollTop = 0;
+  window.scrollTo(0, 0);
 }
-document.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', () => { app.editId = null; renderPage(el.dataset.page); }));
+document.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', () => {
+  app.editId = null;
+  closeSidebar();
+  renderPage(el.dataset.page);
+}));
 function goAddNew() { app.editId = null; renderPage('add'); }
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebarOverlay');
+  sb.classList.toggle('open');
+  if (ov) ov.classList.toggle('visible', sb.classList.contains('open'));
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  const ov = document.getElementById('sidebarOverlay');
+  if (ov) ov.classList.remove('visible');
+}
+function bnNav(page) {
+  closeSidebar();
+  app.editId = null;
+  renderPage(page);
+}
 function toggleTheme() {
   const html = document.documentElement;
   html.setAttribute('data-theme', html.getAttribute('data-theme') === 'dark' ? '' : 'dark');
@@ -1096,7 +1245,7 @@ function renderTransactions() {
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>วันที่</th><th>ประเภท</th><th>หมวดหมู่</th><th>หมายเหตุ</th><th style="text-align:right">จำนวน</th><th></th></tr></thead>
+          <thead><tr><th class="tbl-col-date">วันที่</th><th>ประเภท</th><th>หมวดหมู่</th><th class="tbl-col-note">หมายเหตุ</th><th style="text-align:right">จำนวน</th><th></th></tr></thead>
           <tbody id="txnBody"></tbody>
         </table>
       </div>
@@ -1126,11 +1275,11 @@ function applyFilter() {
   if (!body) return;
   const inc = sumType(txns, 'income'), exp = sumType(txns, 'expense');
   body.innerHTML = txns.length ? txns.map(t => `<tr>
-    <td>${fmtDate(t.date)}</td>
+    <td class="tbl-col-date">${fmtDate(t.date)}</td>
     <td><span class="badge badge-${t.type}">${t.type === 'income' ? 'รายรับ' : 'รายจ่าย'}</span></td>
-    <td>${t.category}</td>
-    <td class="text-muted text-sm">${t.note || '—'}</td>
-    <td class="amount-${t.type}" style="text-align:right">฿${fmtMoney(t.amount)}</td>
+    <td><div style="font-weight:500">${t.category}</div><div class="text-muted" style="font-size:11px">${fmtDate(t.date)}</div></td>
+    <td class="tbl-col-note text-muted text-sm">${t.note || '—'}</td>
+    <td class="amount-${t.type}" style="text-align:right;white-space:nowrap">฿${fmtMoney(t.amount)}</td>
     <td><div class="tbl-actions">
       <button class="action-btn" onclick="editTxn(${t.id})" title="แก้ไข"><i class="ti ti-edit"></i></button>
       <button class="action-btn danger" onclick="delTxn(${t.id})" title="ลบ"><i class="ti ti-trash"></i></button>
@@ -1600,11 +1749,11 @@ function clearData() {
    RESPONSIVE
 ══════════════════════════════════════════════════ */
 function checkResponsive() {
-  const btn = document.getElementById('menuToggle');
-  if (btn) btn.style.display = window.innerWidth <= 900 ? '' : 'none';
+  // menu toggle & bottom nav handled by CSS media queries
+  // close sidebar if resizing to desktop
+  if (window.innerWidth > 900) closeSidebar();
 }
 window.addEventListener('resize', checkResponsive);
-checkResponsive();
 </script>
 </body>
 </html>
