@@ -388,20 +388,20 @@ tbody tr:hover td{background:var(--surface2)}
 
 /* ─── Image lightbox ─────────────────────────────── */
 #lightbox{
-  position:fixed;inset:0;background:rgba(0,0,0,.8);
+  position:fixed;inset:0;background:rgba(0,0,0,.85);
   z-index:9998;display:none;align-items:center;justify-content:center;
   backdrop-filter:blur(8px);
+  padding:1.5rem;
 }
 #lightbox.open{display:flex}
-#lightbox img{max-width:90vw;max-height:90vh;border-radius:var(--r-lg);box-shadow:0 24px 64px rgba(0,0,0,.5)}
 #lightbox .lb-close{
-  position:absolute;top:1.5rem;right:1.5rem;
+  position:absolute;top:1.25rem;right:1.25rem;
   background:rgba(255,255,255,.15);border:none;color:#fff;
   width:40px;height:40px;border-radius:50%;font-size:18px;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
-  transition:background .2s;
+  transition:background .2s;z-index:1;
 }
-#lightbox .lb-close:hover{background:rgba(255,255,255,.25)}
+#lightbox .lb-close:hover{background:rgba(255,255,255,.28)}
 
 /* ─── Filters ────────────────────────────────────── */
 .filter-bar{
@@ -607,7 +607,11 @@ tbody tr:hover td{background:var(--surface2)}
 <!-- LIGHTBOX -->
 <div id="lightbox">
   <button class="lb-close" onclick="closeLightbox()"><i class="ti ti-x"></i></button>
-  <img id="lightboxImg" src="" alt="สลิป">
+  <div id="lightboxInner" style="display:flex;flex-direction:column;align-items:center;gap:14px;max-width:90vw">
+    <img id="lightboxImg" src="" alt="สลิป" style="max-width:90vw;max-height:72vh;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.5)">
+    <div id="lightboxInfo" style="background:rgba(255,255,255,.1);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:.75rem 1.25rem;color:#fff;font-size:13px;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center;min-width:200px"></div>
+    <a id="lightboxDownload" download="slip.jpg" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:.4rem 1rem;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">⬇️ ดาวน์โหลดสลิป</a>
+  </div>
 </div>
 
 <!-- LOGIN -->
@@ -837,12 +841,33 @@ function toast(msg,type=''){
 /* ══════════════════════════════════════════════════
    LIGHTBOX
 ══════════════════════════════════════════════════ */
-function openLightbox(src){
-  document.getElementById('lightboxImg').src=src;
+function openLightbox(src, txn){
+  const img=document.getElementById('lightboxImg');
+  const info=document.getElementById('lightboxInfo');
+  const dl=document.getElementById('lightboxDownload');
+  img.src=src;
+  dl.href=src;
+  dl.download=(txn?`slip_${txn.date}_${txn.category}`:'slip')+'.jpg';
+  if(txn&&info){
+    info.style.display='flex';
+    info.innerHTML=`
+      <span>${getCatEmoji(txn.type,txn.category)} <strong>${txn.category}</strong></span>
+      <span>📅 ${fmtDate(txn.date)}</span>
+      <span style="color:${txn.type==='income'?'#6ee7b7':'#fda4af'};font-weight:600">฿${fmtMoney(txn.amount)}</span>
+      ${txn.note?`<span style="color:rgba(255,255,255,.6)">📝 ${txn.note}</span>`:''}
+    `;
+  } else if(info){
+    info.style.display='none';
+  }
   document.getElementById('lightbox').classList.add('open');
 }
+function openLightboxById(idStr){
+  const id=Number(idStr);
+  const txn=app.transactions.find(t=>t.id===id);
+  if(txn&&txn.slipImg)openLightbox(txn.slipImg,txn);
+}
 function closeLightbox(){document.getElementById('lightbox').classList.remove('open')}
-document.getElementById('lightbox').addEventListener('click',function(e){if(e.target===this)closeLightbox()});
+document.getElementById('lightbox').addEventListener('click',function(e){if(e.target===this||e.target.id==='lightbox')closeLightbox()});
 
 /* ══════════════════════════════════════════════════
    AUTH
@@ -960,7 +985,7 @@ function renderOverview(){
             <td><span class="badge badge-${t.type}">${t.type==='income'?'💚 รายรับ':'❤️ รายจ่าย'}</span></td>
             <td>${getCatEmoji(t.type,t.category)} ${t.category}</td>
             <td style="color:var(--text-3);font-size:12px">${t.note||'—'}</td>
-            <td>${t.slipImg?`<img class="slip-thumb" src="${t.slipImg}" onclick="openLightbox('${t.slipImg.replace(/'/g,"\\'")}'" alt="สลิป">`:'<span class="no-slip">—</span>'}</td>
+            <td>${t.slipImg?`<img class="slip-thumb" src="${t.slipImg}" data-txnid="${t.id}" onclick="openLightboxById(this.dataset.txnid)" alt="สลิป">`:'<span class="no-slip">—</span>'}</td>
             <td class="amount-${t.type}" style="text-align:right">฿${fmtMoney(t.amount)}</td>
           </tr>`).join('')}</tbody>
         </table>
@@ -1169,7 +1194,7 @@ function applyFilter(){
     <td><span class="badge badge-${t.type}">${t.type==='income'?'💚 รายรับ':'❤️ รายจ่าย'}</span></td>
     <td>${getCatEmoji(t.type,t.category)} ${t.category}</td>
     <td style="color:var(--text-3);font-size:12px">${t.note||'—'}</td>
-    <td>${t.slipImg?`<img class="slip-thumb" src="${t.slipImg}" onclick="openLightbox(this.src)" alt="สลิป">`:'<span class="no-slip">—</span>'}</td>
+    <td>${t.slipImg?`<img class="slip-thumb" src="${t.slipImg}" data-txnid="${t.id}" onclick="openLightboxById(this.dataset.txnid)" alt="สลิป">`:'<span class="no-slip">—</span>'}</td>
     <td class="amount-${t.type}" style="text-align:right">฿${fmtMoney(t.amount)}</td>
     <td><div class="tbl-actions">
       <button class="action-btn" onclick="editTxn(${t.id})" title="แก้ไข">✏️</button>
