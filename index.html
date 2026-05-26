@@ -1123,17 +1123,23 @@ function saveEntry(){
   const note=document.getElementById('fNote').value.trim();
   if(!amt||amt<=0){toast('กรุณากรอกจำนวนเงิน','error');return}
   if(!date){toast('กรุณาเลือกวันที่','error');return}
+  let savedTxn;
   if(app.editId){
     const t=app.transactions.find(t=>t.id===app.editId);
-    if(t){t.amount=amt;t.date=date;t.category=cat;t.note=note;t.type=app.formType;t.slipImg=pendingSlipBase64||null}
+    if(t){t.amount=amt;t.date=date;t.category=cat;t.note=note;t.type=app.formType;t.slipImg=pendingSlipBase64||null;savedTxn=t;}
     app.editId=null;toast('✅ แก้ไขรายการเรียบร้อย','success');
   } else {
-    const entry={id:Date.now(),type:app.formType,amount:amt,category:cat,date,note,slipImg:pendingSlipBase64||null};
-    app.transactions.push(entry);
+    savedTxn={id:Date.now(),type:app.formType,amount:amt,category:cat,date,note,slipImg:pendingSlipBase64||null};
+    app.transactions.push(savedTxn);
     toast('✅ บันทึกรายการเรียบร้อย','success');
   }
   pendingSlipBase64=null;
-  save();pushAllToGS();renderAdd();
+  save();
+  // push ข้อมูลหลักก่อน แล้วค่อย push สลิปแยก
+  pushAllToGS().then(()=>{
+    if(savedTxn&&savedTxn.slipImg)pushSlipsToGS([savedTxn]);
+  });
+  renderAdd();
 }
 
 /* ══════════════════════════════════════════════════
@@ -1432,49 +1438,80 @@ function renderSettings(){
               3️⃣ วางโค้ดด้านล่างใน Code.gs แล้วกด Save<br>
               4️⃣ Deploy → New deployment → Web App → Execute as: Me → Who has access: Anyone<br>
               5️⃣ คัดลอก Web App URL มาวางด้านบน<br><br>
-              <strong>โค้ด Apps Script (รองรับ รูปสลิป + หมวดหมู่):</strong><br>
+              ระบบจะสร้าง 3 Sheet อัตโนมัติ: <strong>FinFlow</strong> (รายการ) · <strong>Categories</strong> (หมวดหมู่) · <strong>Slips</strong> (สลิปรูป)<br><br>
+              <strong>โค้ด Apps Script (รองรับสลิปรูปแบบ chunked base64):</strong><br>
               <textarea readonly style="width:100%;height:220px;font-size:10px;font-family:monospace;background:var(--bg-solid);border:1px solid var(--border-2);border-radius:4px;padding:8px;color:var(--text);resize:vertical">const SHEET_TXN = 'FinFlow';
 const SHEET_CATS = 'Categories';
-const TXN_HEADERS = ['ID','วันที่','ประเภท','หมวดหมู่','จำนวน','หมายเหตุ','สลิป(base64)'];
+const SHEET_SLIPS = 'Slips';
+const TXN_HEADERS = ['ID','วันที่','ประเภท','หมวดหมู่','จำนวน','หมายเหตุ','มีสลิป'];
 const CAT_HEADERS = ['ประเภท','emoji','ชื่อหมวดหมู่'];
+const SLIP_HEADERS = ['TxnID','ChunkIndex','Data'];
+
+function getSheet(name, headers) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(name);
+  if (!sh) { sh = ss.insertSheet(name); sh.appendRow(headers); }
+  return sh;
+}
 
 function doGet(e) {
-  const action = e.parameter.action || 'read';
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const action = (e.parameter && e.parameter.action) || 'read';
   if (action === 'read') {
-    let sh = ss.getSheetByName(SHEET_TXN) || ss.insertSheet(SHEET_TXN);
-    const data = sh.getDataRange().getValues();
-    const rows = data.slice(1).filter(r => r[0]);
+    const sh = getSheet(SHEET_TXN, TXN_HEADERS);
+    const rows = sh.getDataRange().getValues().slice(1).filter(r => r[0]);
     return out(rows);
   }
   if (action === 'readCats') {
-    let sh = ss.getSheetByName(SHEET_CATS) || ss.insertSheet(SHEET_CATS);
-    const data = sh.getDataRange().getValues();
-    const rows = data.slice(1).filter(r => r[0]);
+    const sh = getSheet(SHEET_CATS, CAT_HEADERS);
+    const rows = sh.getDataRange().getValues().slice(1).filter(r => r[0]);
     return out(rows);
+  }
+  if (action === 'readSlip') {
+    const id = e.parameter.id;
+    const sh = getSheet(SHEET_SLIPS, SLIP_HEADERS);
+    const rows = sh.getDataRange().getValues().slice(1)
+      .filter(r => String(r[0]) === String(id))
+      .sort((a, b) => Number(a[1]) - Number(b[1]));
+    if (!rows.length) return out({data:null});
+    const base64 = rows.map(r => r[2]).join('');
+    return out({data: base64});
   }
   return out([]);
 }
 
 function doPost(e) {
   const payload = JSON.parse(e.postData.contents);
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
   if (payload.action === 'writeCats') {
-    let sh = ss.getSheetByName(SHEET_CATS) || ss.insertSheet(SHEET_CATS);
-    sh.clearContents();
-    sh.appendRow(CAT_HEADERS);
-    if (payload.rows && payload.rows.length) {
+    const sh = getSheet(SHEET_CATS, CAT_HEADERS);
+    sh.clearContents(); sh.appendRow(CAT_HEADERS);
+    if (payload.rows && payload.rows.length)
       sh.getRange(2,1,payload.rows.length,payload.rows[0].length).setValues(payload.rows);
+    return out({ok:true});
+  }
+
+  if (payload.action === 'writeSlip') {
+    const sh = getSheet(SHEET_SLIPS, SLIP_HEADERS);
+    // ลบ chunks เก่าของ id นี้ก่อน
+    const data = sh.getDataRange().getValues();
+    const toDelete = [];
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][0]) === String(payload.id)) toDelete.push(i + 1);
+    }
+    toDelete.forEach(row => sh.deleteRow(row));
+    // เขียน chunks ใหม่
+    if (payload.chunks && payload.chunks.length) {
+      const newRows = payload.chunks.map((c, i) => [payload.id, i, c]);
+      sh.getRange(sh.getLastRow()+1, 1, newRows.length, 3).setValues(newRows);
     }
     return out({ok:true});
   }
+
   // default: write transactions
-  let sh = ss.getSheetByName(SHEET_TXN) || ss.insertSheet(SHEET_TXN);
-  sh.clearContents();
-  sh.appendRow(TXN_HEADERS);
-  if (payload.rows && payload.rows.length) {
+  const sh = getSheet(SHEET_TXN, TXN_HEADERS);
+  sh.clearContents(); sh.appendRow(TXN_HEADERS);
+  if (payload.rows && payload.rows.length)
     sh.getRange(2,1,payload.rows.length,payload.rows[0].length).setValues(payload.rows);
-  }
   return out({ok:true});
 }
 
@@ -1558,15 +1595,28 @@ async function manualPull(){
   if(el)el.innerHTML=`<span class="sync-badge" style="color:var(--text-3)">⏳ กำลังดึงข้อมูล…</span>`;
   const ok=await pullFromGS();
   await pullCatsFromGS();
-  if(ok){if(el)el.innerHTML=`<span class="sync-badge sync-ok">✅ ดึงข้อมูลสำเร็จ (${app.transactions.length} รายการ)</span>`;toast('✅ ดึงข้อมูลสำเร็จ','success');renderPage('overview')}
-  else{if(el)el.innerHTML=`<span class="sync-badge sync-err">❌ ดึงข้อมูลไม่สำเร็จ</span>`;toast('ดึงข้อมูลไม่สำเร็จ','error')}
+  if(ok){
+    const slipCount=app.transactions.filter(t=>t.slipImg).length;
+    if(el)el.innerHTML=`<span class="sync-badge sync-ok">✅ ดึงข้อมูลสำเร็จ (${app.transactions.length} รายการ, สลิป ${slipCount} รูป)</span>`;
+    toast('✅ ดึงข้อมูลสำเร็จ','success');renderPage('overview');
+  } else {
+    if(el)el.innerHTML=`<span class="sync-badge sync-err">❌ ดึงข้อมูลไม่สำเร็จ</span>`;
+    toast('ดึงข้อมูลไม่สำเร็จ','error');
+  }
 }
 async function manualPush(){
   const el=document.getElementById('gsSyncStatus');
   if(!app.gs.webAppUrl){toast('กรุณากรอก Web App URL ก่อน','error');return}
-  if(el)el.innerHTML=`<span class="sync-badge" style="color:var(--text-3)">⏳ กำลังอัปโหลด…</span>`;
-  await pushAllToGS();await pushCatsToGS();
-  if(el)el.innerHTML=`<span class="sync-badge sync-ok">✅ อัปโหลดสำเร็จ</span>`;
+  if(el)el.innerHTML=`<span class="sync-badge" style="color:var(--text-3)">⏳ กำลังอัปโหลดรายการ…</span>`;
+  await pushAllToGS();
+  const withSlip=app.transactions.filter(t=>t.slipImg);
+  if(withSlip.length){
+    if(el)el.innerHTML=`<span class="sync-badge" style="color:var(--text-3)">⏳ กำลังอัปโหลดสลิป (${withSlip.length} รูป)…</span>`;
+    await pushSlipsToGS(withSlip);
+  }
+  await pushCatsToGS();
+  const slipCount=withSlip.length;
+  if(el)el.innerHTML=`<span class="sync-badge sync-ok">✅ อัปโหลดสำเร็จ (${app.transactions.length} รายการ, สลิป ${slipCount} รูป)</span>`;
   toast('✅ อัปโหลดข้อมูลไปยัง Google Sheet สำเร็จ','success');
 }
 
@@ -1586,25 +1636,58 @@ async function gsRequest(params){
   }catch(e){console.warn('GS:',e);return null}
 }
 
+// ── Transaction rows (ไม่มี base64 — สลิปอยู่ใน Slips sheet แยก) ──
 function txnToRow(t){
-  return[t.id,t.date,t.type==='income'?'รายรับ':'รายจ่าย',t.category,t.amount.toFixed(2),t.note||'',t.slipImg||''];
+  return[t.id,t.date,t.type==='income'?'รายรับ':'รายจ่าย',t.category,t.amount.toFixed(2),t.note||'',t.slipImg?'1':''];
 }
 function rowToTxn(r){
   if(!r[0])return null;
-  return{id:Number(r[0]),date:r[1],type:r[2]==='รายรับ'?'income':'expense',category:r[3],amount:parseFloat(r[4])||0,note:r[5]||'',slipImg:r[6]||null};
+  return{id:Number(r[0]),date:r[1],type:r[2]==='รายรับ'?'income':'expense',category:r[3],amount:parseFloat(r[4])||0,note:r[5]||'',slipImg:null,_hasSlip:r[6]==='1'};
 }
 
+// ── Push transactions (no slip data) ──
 async function pushAllToGS(){
   if(!app.gs.enabled||!app.gs.webAppUrl)return;
   await gsRequest({action:'write',rows:app.transactions.map(txnToRow)});
 }
+
+// ── Push slips for transactions that have one ──
+// ส่งทีละรูปเพื่อไม่ให้ payload ใหญ่เกิน
+async function pushSlipsToGS(txnsWithSlip){
+  if(!app.gs.enabled||!app.gs.webAppUrl)return;
+  if(!txnsWithSlip||!txnsWithSlip.length)return;
+  for(const t of txnsWithSlip){
+    if(!t.slipImg)continue;
+    // แบ่ง base64 เป็น chunks ๆ ละ 40,000 chars (< 50k cell limit)
+    const CHUNK=40000;
+    const chunks=[];
+    for(let i=0;i<t.slipImg.length;i+=CHUNK)chunks.push(t.slipImg.slice(i,i+CHUNK));
+    await gsRequest({action:'writeSlip',id:t.id,chunks});
+  }
+}
+
+// ── Pull transactions then fetch slips for each ──
 async function pullFromGS(){
   if(!app.gs.enabled||!app.gs.webAppUrl)return false;
   const data=await gsRequest({action:'read'});
   if(!Array.isArray(data))return false;
-  app.transactions=data.map(rowToTxn).filter(Boolean);
+  const txns=data.map(rowToTxn).filter(Boolean);
+
+  // ดึงสลิปสำหรับรายการที่มีสลิป
+  const withSlip=txns.filter(t=>t._hasSlip);
+  if(withSlip.length){
+    // ดึงทีละรายการ
+    for(const t of withSlip){
+      const res=await gsRequest({action:'readSlip',id:t.id});
+      if(res&&res.data)t.slipImg=res.data;
+    }
+  }
+  // ลบ _hasSlip ออก
+  txns.forEach(t=>delete t._hasSlip);
+  app.transactions=txns;
   save();return true;
 }
+
 async function syncGS(){await pushAllToGS()}
 
 // Categories GS sync
