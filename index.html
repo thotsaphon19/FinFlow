@@ -1323,26 +1323,38 @@ function renderSettings() {
               <textarea readonly style="width:100%;height:160px;font-size:10px;font-family:monospace;background:var(--bg);border:1px solid var(--border-2);border-radius:4px;padding:6px;color:var(--text);resize:vertical">const SHEET_NAME = 'FinFlow';
 const HEADERS = ['ID','วันที่','ประเภท','หมวดหมู่','จำนวน','หมายเหตุ'];
 
-function doGet(e) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
-  const data = sh.getDataRange().getValues();
-  const rows = data.slice(1).filter(r => r[0]);
-  return ContentService.createTextOutput(JSON.stringify(rows))
+function setCORS(output) {
+  return output
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function doPost(e) {
-  const payload = JSON.parse(e.postData.contents);
+function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
-  sh.clearContents();
-  sh.appendRow(HEADERS);
-  if (payload.rows && payload.rows.length) {
-    sh.getRange(2, 1, payload.rows.length, payload.rows[0].length).setValues(payload.rows);
+  let sh = ss.getSheetByName(SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_NAME);
+    sh.appendRow(HEADERS);
   }
-  return ContentService.createTextOutput(JSON.stringify({ok:true}))
-    .setMimeType(ContentService.MimeType.JSON);
+  const data = sh.getDataRange().getValues();
+  const rows = data.slice(1).filter(r => r[0] !== '' && r[0] !== null);
+  return setCORS(ContentService.createTextOutput(JSON.stringify(rows)));
+}
+
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
+    sh.clearContents();
+    sh.appendRow(HEADERS);
+    if (payload.rows && payload.rows.length > 0) {
+      sh.getRange(2, 1, payload.rows.length, payload.rows[0].length)
+        .setValues(payload.rows);
+    }
+    return setCORS(ContentService.createTextOutput(JSON.stringify({ok:true})));
+  } catch(err) {
+    return setCORS(ContentService.createTextOutput(JSON.stringify({ok:false, error: err.toString()})));
+  }
 }</textarea>
             </div>
           </details>
@@ -1454,17 +1466,25 @@ async function gsRequest(params) {
   if (!app.gs.webAppUrl) return null;
   try {
     if (params.action === 'read') {
-      const res = await fetch(app.gs.webAppUrl + '?action=read');
-      return await res.json();
+      // GET + follow redirect (Apps Script redirects to final URL)
+      const res = await fetch(app.gs.webAppUrl + '?action=read', {
+        redirect: 'follow'
+      });
+      const text = await res.text();
+      return JSON.parse(text);
     } else {
+      // Apps Script POST ต้องการ Content-Type: text/plain เพื่อหลีกเลี่ยง CORS preflight
+      // และต้อง follow redirect ด้วย
       const res = await fetch(app.gs.webAppUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(params)
       });
-      return await res.json();
+      const text = await res.text();
+      return JSON.parse(text);
     }
-  } catch(e) { console.warn('GS:', e); return null; }
+  } catch(e) { console.warn('GS error:', e); return null; }
 }
 
 function txnToRow(t) {
@@ -1482,9 +1502,15 @@ async function pushAllToGS() {
 
 async function pullFromGS() {
   if (!app.gs.enabled || !app.gs.webAppUrl) return false;
+  console.log('[GS] pulling from', app.gs.webAppUrl);
   const data = await gsRequest({ action: 'read' });
-  if (!Array.isArray(data)) return false;
+  console.log('[GS] pull result:', data);
+  if (!Array.isArray(data)) {
+    console.warn('[GS] expected array, got:', typeof data, data);
+    return false;
+  }
   app.transactions = data.map(rowToTxn).filter(Boolean);
+  console.log('[GS] loaded', app.transactions.length, 'transactions');
   save();
   return true;
 }
