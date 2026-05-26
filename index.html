@@ -384,6 +384,14 @@ tbody tr:hover td{background:var(--surface2)}
   cursor:pointer;transition:transform .2s;
 }
 .slip-thumb:hover{transform:scale(1.1)}
+.slip-load-btn{
+  background:var(--brand-light);color:var(--brand);
+  border:1px solid var(--brand);border-radius:8px;
+  padding:3px 10px;font-size:11px;cursor:pointer;
+  font-family:var(--font);transition:all .18s;white-space:nowrap;
+}
+.slip-load-btn:hover{background:var(--brand);color:#fff}
+.slip-load-btn:disabled{opacity:.5;cursor:not-allowed}
 .no-slip{color:var(--text-3);font-size:11px}
 
 /* ─── Image lightbox ─────────────────────────────── */
@@ -865,6 +873,41 @@ function openLightboxById(idStr){
   const id=Number(idStr);
   const txn=app.transactions.find(t=>t.id===id);
   if(txn&&txn.slipImg)openLightbox(txn.slipImg,txn);
+}
+
+// ── สร้าง HTML สำหรับเซลล์สลิปในตาราง ──────────────
+// - มีรูป → แสดง thumbnail
+// - GS บอกมีสลิปแต่ยังไม่โหลด (_hasSlip ถูกลบไปแล้วหลัง pull แต่ slipImg=null) 
+//   → ตรวจจาก flag _slipPending ที่ set ตอน rowToTxn
+// - ไม่มีทั้งคู่ → "—"
+function slipCell(t){
+  if(t.slipImg){
+    return `<img class="slip-thumb" src="${t.slipImg}" data-txnid="${t.id}" onclick="openLightboxById(this.dataset.txnid)" alt="สลิป">`;
+  }
+  if(t._slipPending){
+    return `<button class="slip-load-btn" data-txnid="${t.id}" onclick="loadSlipInline(this)">📎 โหลด</button>`;
+  }
+  return `<span class="no-slip">—</span>`;
+}
+
+// ── โหลดสลิปของรายการเดียวจาก GS แล้วแสดงทันที ─────
+async function loadSlipInline(btn){
+  const id=Number(btn.dataset.txnid);
+  const txn=app.transactions.find(t=>t.id===id);
+  if(!txn)return;
+  btn.textContent='⏳';btn.disabled=true;
+  const res=await gsRequest({action:'readSlip',id:txn.id});
+  if(res&&res.data){
+    txn.slipImg=res.data;
+    txn._slipPending=false;
+    save();
+    // แทนที่ปุ่มด้วย thumbnail ทันที
+    const td=btn.parentElement;
+    td.innerHTML=`<img class="slip-thumb" src="${txn.slipImg}" data-txnid="${txn.id}" onclick="openLightboxById(this.dataset.txnid)" alt="สลิป">`;
+  } else {
+    btn.textContent='❌';
+    setTimeout(()=>{btn.textContent='📎 โหลด';btn.disabled=false;},2000);
+  }
 }
 function closeLightbox(){document.getElementById('lightbox').classList.remove('open')}
 document.getElementById('lightbox').addEventListener('click',function(e){if(e.target===this||e.target.id==='lightbox')closeLightbox()});
@@ -1439,74 +1482,9 @@ function renderSettings(){
               4️⃣ Deploy → New deployment → Web App → Execute as: Me → Who has access: Anyone<br>
               5️⃣ คัดลอก Web App URL มาวางด้านบน<br><br>
               ระบบจะสร้าง 3 Sheet อัตโนมัติ: <strong>FinFlow</strong> (รายการ) · <strong>Categories</strong> (หมวดหมู่) · <strong>Slips</strong> (สลิปรูป)<br><br>
-              <strong>โค้ด Apps Script (รองรับสลิปรูปแบบ chunked base64):</strong><br>
-              <textarea readonly style="width:100%;height:260px;font-size:10px;font-family:monospace;background:var(--bg-solid);border:1px solid var(--border-2);border-radius:4px;padding:8px;color:var(--text);resize:vertical">// FinFlow — Code.gs  (วางแทนที่โค้ดเดิมทั้งหมด แล้ว Deploy ใหม่)
-const SHEET_TXN='FinFlow', SHEET_CATS='Categories', SHEET_SLIPS='Slips';
-const TXN_HDR=['ID','วันที่','ประเภท','หมวดหมู่','จำนวน','หมายเหตุ','มีสลิป'];
-const CAT_HDR=['ประเภท','Emoji','ชื่อหมวดหมู่'];
-const SLIP_HDR=['TxnID','ChunkIndex','Data'];
-
-function getSheet(name,hdr){
-  const ss=SpreadsheetApp.getActiveSpreadsheet();
-  let sh=ss.getSheetByName(name);
-  if(!sh){sh=ss.insertSheet(name);sh.appendRow(hdr);}
-  return sh;
-}
-function out(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}
-
-function doGet(e){
-  const a=(e&&e.parameter&&e.parameter.action)||'read';
-  if(a==='read'){
-    const rows=getSheet(SHEET_TXN,TXN_HDR).getDataRange().getValues().slice(1).filter(r=>r[0]!=='');
-    return out(rows);
-  }
-  if(a==='readCats'){
-    const rows=getSheet(SHEET_CATS,CAT_HDR).getDataRange().getValues().slice(1).filter(r=>r[0]!=='');
-    return out(rows);
-  }
-  if(a==='readSlip'){
-    const id=e.parameter.id;
-    const chunks=getSheet(SHEET_SLIPS,SLIP_HDR).getDataRange().getValues().slice(1)
-      .filter(r=>String(r[0])===String(id)).sort((a,b)=>Number(a[1])-Number(b[1]));
-    if(!chunks.length)return out({ok:true,data:null});
-    return out({ok:true,data:chunks.map(r=>String(r[2])).join('')});
-  }
-  return out({ok:false,error:'unknown'});
-}
-
-function doPost(e){
-  const p=JSON.parse(e.postData.contents);
-  const a=p.action||'write';
-  if(a==='write'){
-    const sh=getSheet(SHEET_TXN,TXN_HDR);sh.clearContents();sh.appendRow(TXN_HDR);
-    if(p.rows&&p.rows.length)sh.getRange(2,1,p.rows.length,p.rows[0].length).setValues(p.rows);
-    return out({ok:true});
-  }
-  if(a==='writeCats'){
-    const sh=getSheet(SHEET_CATS,CAT_HDR);sh.clearContents();sh.appendRow(CAT_HDR);
-    if(p.rows&&p.rows.length)sh.getRange(2,1,p.rows.length,p.rows[0].length).setValues(p.rows);
-    return out({ok:true});
-  }
-  if(a==='writeSlip'){
-    if(!p.id)return out({ok:false,error:'missing id'});
-    const sh=getSheet(SHEET_SLIPS,SLIP_HDR);
-    const vals=sh.getDataRange().getValues();
-    for(let i=vals.length-1;i>=1;i--){if(String(vals[i][0])===String(p.id))sh.deleteRow(i+1);}
-    if(p.chunks&&p.chunks.length){
-      const rows=p.chunks.map((c,i)=>[String(p.id),i,c]);
-      sh.getRange(sh.getLastRow()+1,1,rows.length,3).setValues(rows);
-    }
-    return out({ok:true,chunks:(p.chunks||[]).length});
-  }
-  if(a==='deleteSlip'){
-    if(!p.id)return out({ok:false,error:'missing id'});
-    const sh=getSheet(SHEET_SLIPS,SLIP_HDR);
-    const vals=sh.getDataRange().getValues();
-    for(let i=vals.length-1;i>=1;i--){if(String(vals[i][0])===String(p.id))sh.deleteRow(i+1);}
-    return out({ok:true});
-  }
-  return out({ok:false,error:'unknown action'});
-}</textarea>
+              <strong>โค้ด Apps Script:</strong><br>
+              <div id="gsCodeBox" style="background:var(--bg-solid);border:1px solid var(--border-2);border-radius:4px;padding:8px;font-size:10px;font-family:monospace;color:var(--text);white-space:pre;overflow-x:auto;max-height:220px;overflow-y:auto;cursor:text;user-select:all"></div>
+              <button class="btn btn-sm" style="margin-top:6px" onclick="copyGsCode()">📋 คัดลอกโค้ด</button>
             </div>
           </details>
         </div>
@@ -1540,11 +1518,107 @@ function doPost(e){
         </div>
       </div>
     </div>`;
+  // เติมโค้ด Apps Script ลงใน div (หลีกเลี่ยง backtick ใน template literal)
+  fillGsCodeBox();
 }
 
 /* ══════════════════════════════════════════════════
-   GS HELPERS
+   APPS SCRIPT CODE (เก็บเป็น string — ไม่มี backtick ใน template)
 ══════════════════════════════════════════════════ */
+const GS_CODE = [
+  '// FinFlow — Code.gs  วางแทนที่โค้ดเดิมทั้งหมด แล้ว Deploy ใหม่',
+  'var SHEET_TXN="FinFlow", SHEET_CATS="Categories", SHEET_SLIPS="Slips";',
+  'var TXN_HDR=["ID","วันที่","ประเภท","หมวดหมู่","จำนวน","หมายเหตุ","มีสลิป"];',
+  'var CAT_HDR=["ประเภท","Emoji","ชื่อหมวดหมู่"];',
+  'var SLIP_HDR=["TxnID","ChunkIndex","Data"];',
+  '',
+  'function getSheet(name,hdr){',
+  '  var ss=SpreadsheetApp.getActiveSpreadsheet();',
+  '  var sh=ss.getSheetByName(name);',
+  '  if(!sh){sh=ss.insertSheet(name);if(hdr&&hdr.length>0)sh.appendRow(hdr);}',
+  '  return sh;',
+  '}',
+  'function out(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON);}',
+  '',
+  'function doGet(e){',
+  '  var a=(e&&e.parameter&&e.parameter.action)||"read";',
+  '  if(a==="read"){',
+  '    var sh=getSheet(SHEET_TXN,TXN_HDR);',
+  '    var vals=sh.getDataRange().getValues();',
+  '    var rows=[];for(var i=1;i<vals.length;i++){if(vals[i][0]!=="")rows.push(vals[i]);}',
+  '    return out(rows);',
+  '  }',
+  '  if(a==="readCats"){',
+  '    var sh=getSheet(SHEET_CATS,CAT_HDR);',
+  '    var vals=sh.getDataRange().getValues();',
+  '    var rows=[];for(var i=1;i<vals.length;i++){if(vals[i][0]!=="")rows.push(vals[i]);}',
+  '    return out(rows);',
+  '  }',
+  '  if(a==="readSlip"){',
+  '    var id=e.parameter.id;',
+  '    if(!id)return out({ok:false,error:"missing id"});',
+  '    var sh=getSheet(SHEET_SLIPS,SLIP_HDR);',
+  '    var vals=sh.getDataRange().getValues();',
+  '    var chunks=[];',
+  '    for(var i=1;i<vals.length;i++){if(String(vals[i][0])===String(id))chunks.push(vals[i]);}',
+  '    if(!chunks.length)return out({ok:true,data:null});',
+  '    chunks.sort(function(a,b){return Number(a[1])-Number(b[1]);});',
+  '    var base64=chunks.map(function(r){return String(r[2]);}).join("");',
+  '    return out({ok:true,data:base64});',
+  '  }',
+  '  return out({ok:false,error:"unknown action"});',
+  '}',
+  '',
+  'function doPost(e){',
+  '  var p=JSON.parse(e.postData.contents);',
+  '  var a=p.action||"write";',
+  '  if(a==="write"){',
+  '    var sh=getSheet(SHEET_TXN,TXN_HDR);sh.clearContents();sh.appendRow(TXN_HDR);',
+  '    if(p.rows&&p.rows.length>0)sh.getRange(2,1,p.rows.length,p.rows[0].length).setValues(p.rows);',
+  '    return out({ok:true});',
+  '  }',
+  '  if(a==="writeCats"){',
+  '    var sh=getSheet(SHEET_CATS,CAT_HDR);sh.clearContents();sh.appendRow(CAT_HDR);',
+  '    if(p.rows&&p.rows.length>0)sh.getRange(2,1,p.rows.length,p.rows[0].length).setValues(p.rows);',
+  '    return out({ok:true});',
+  '  }',
+  '  if(a==="writeSlip"){',
+  '    if(!p.id)return out({ok:false,error:"missing id"});',
+  '    var sh=getSheet(SHEET_SLIPS,SLIP_HDR);',
+  '    var vals=sh.getDataRange().getValues();',
+  '    for(var i=vals.length-1;i>=1;i--){if(String(vals[i][0])===String(p.id))sh.deleteRow(i+1);}',
+  '    var chunks=p.chunks||[];',
+  '    if(chunks.length>0){',
+  '      var newRows=[];',
+  '      for(var i=0;i<chunks.length;i++)newRows.push([String(p.id),i,chunks[i]]);',
+  '      sh.getRange(sh.getLastRow()+1,1,newRows.length,3).setValues(newRows);',
+  '    }',
+  '    return out({ok:true,chunks:chunks.length});',
+  '  }',
+  '  if(a==="deleteSlip"){',
+  '    if(!p.id)return out({ok:false,error:"missing id"});',
+  '    var sh=getSheet(SHEET_SLIPS,SLIP_HDR);',
+  '    var vals=sh.getDataRange().getValues();',
+  '    for(var i=vals.length-1;i>=1;i--){if(String(vals[i][0])===String(p.id))sh.deleteRow(i+1);}',
+  '    return out({ok:true});',
+  '  }',
+  '  return out({ok:false,error:"unknown action: "+a});',
+  '}'
+].join('\n');
+
+function fillGsCodeBox(){
+  const el=document.getElementById('gsCodeBox');
+  if(el)el.textContent=GS_CODE;
+}
+function copyGsCode(){
+  navigator.clipboard.writeText(GS_CODE).then(()=>toast('📋 คัดลอกโค้ดแล้ว!','success')).catch(()=>{
+    // fallback
+    const ta=document.createElement('textarea');
+    ta.value=GS_CODE;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    toast('📋 คัดลอกโค้ดแล้ว!','success');
+  });
+}
 function saveGS(){
   app.gs.webAppUrl=document.getElementById('gsWebAppUrl')?.value.trim()||'';
   app.gs.enabled=document.getElementById('gsEnabled')?.checked||false;
@@ -1633,9 +1707,8 @@ function txnToRow(t){
 }
 function rowToTxn(r){
   if(!r[0])return null;
-  // Google Sheets อาจส่งกลับมาเป็น '1', 1, TRUE, หรือ 'TRUE'
-  const hasSlip = r[6]==='1' || r[6]===1 || r[6]===true || r[6]==='TRUE' || r[6]==='true';
-  return{id:Number(r[0]),date:r[1],type:r[2]==='รายรับ'?'income':'expense',category:r[3],amount:parseFloat(r[4])||0,note:r[5]||'',slipImg:null,_hasSlip:hasSlip};
+  const hasSlip=r[6]==='1'||r[6]===1||r[6]===true||r[6]==='TRUE'||r[6]==='true';
+  return{id:Number(r[0]),date:r[1],type:r[2]==='รายรับ'?'income':'expense',category:r[3],amount:parseFloat(r[4])||0,note:r[5]||'',slipImg:null,_hasSlip:hasSlip,_slipPending:hasSlip};
 }
 
 // ── Push transactions (no slip data) ──
@@ -1670,14 +1743,14 @@ async function pullFromGS(){
   const withSlip=txns.filter(t=>t._hasSlip);
   for(let i=0;i<withSlip.length;i++){
     const t=withSlip[i];
-    // อัปเดต overlay progress
     const ovl=document.getElementById('gsLoadingOverlay');
-    if(ovl){
-      const p=ovl.querySelector('p');
-      if(p)p.textContent=`กำลังโหลดสลิป ${i+1}/${withSlip.length}…`;
-    }
+    if(ovl){const p=ovl.querySelector('p');if(p)p.textContent=`กำลังโหลดสลิป ${i+1}/${withSlip.length}…`;}
     const res=await gsRequest({action:'readSlip',id:t.id});
-    if(res&&res.data)t.slipImg=res.data;
+    if(res&&res.data){
+      t.slipImg=res.data;
+      t._slipPending=false;
+    }
+    // ถ้าโหลดไม่สำเร็จ _slipPending ยังเป็น true → แสดงปุ่ม "โหลด" ในตาราง
   }
   txns.forEach(t=>delete t._hasSlip);
   app.transactions=txns;
