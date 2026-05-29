@@ -507,7 +507,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div id="toasts"></div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+/* FinFlow — all functions in global scope so onclick= attributes work */
 
 /* ════════════════════════════════════════════
    STATE
@@ -1249,8 +1249,10 @@ function seedData(){
 function toggleTheme(){const h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'':'dark')}
 
 /* ════════════════════════════════════════════
-   INIT — wire up everything after DOM ready
+   INIT — runs after DOM is ready
 ════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', function() {
+  ════════════════════════════════════════════ */
 // Login enter key
 document.getElementById('lp').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') doLogin();
@@ -1273,8 +1275,7 @@ checkResp();
 
 // Sidebar collapse state
 sbApply();
-
-}); // end DOMContentLoaded
+});
 </script>
 </body>
 </html>
