@@ -435,7 +435,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <!-- Login -->
 <div id="loginPage">
   <div class="lcard">
-    <div class="lbrand"><div class="llogo">🌸</div><h1>FinFlow</h1><p>ระบบบัญชีรายรับรายจ่าย💕</p></div>
+    <div class="lbrand"><div class="llogo">🌸</div><h1>FinFlow</h1><p>ระบบบัญชีรายรับรายจ่าย 💕</p></div>
     <div class="lfield"><label>ชื่อผู้ใช้</label><input id="lu" type="text" placeholder="ชื่อผู้ใช้" autocomplete="username"></div>
     <div class="lfield"><label>รหัสผ่าน</label><input id="lp" type="password" placeholder="รหัสผ่าน" autocomplete="current-password"></div>
     <div id="lerr" class="lerr">🙈 ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</div>
@@ -577,12 +577,32 @@ function showOvl(on){
 ════════════════════════════════════════════ */
 const now=()=>new Date();
 const fdi=d=>d.toISOString().slice(0,10);
-const fDate=(d,opt)=>new Date(d).toLocaleDateString('th-TH',opt||{day:'2-digit',month:'short',year:'2-digit'});
+// แสดงวันที่เป็น ค.ศ. เช่น 26 พ.ค. 2025
+const fDate=(d,opt)=>new Date(d).toLocaleDateString('th-TH',opt||{day:'2-digit',month:'short',year:'numeric'});
 const fMoney=n=>new Intl.NumberFormat('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 const fShort=n=>Math.abs(n)>=1e6?(n/1e6).toFixed(1)+'M':Math.abs(n)>=1e3?(n/1e3).toFixed(1)+'k':Math.round(n).toString();
 const sumT=(txns,t)=>txns.filter(x=>x.type===t).reduce((s,x)=>s+x.amount,0);
 const getEM=(type,name)=>{const c=S.cats[type]?.find(x=>x.n===name);return c?c.e:'🌸'};
 function getCatNames(type){return(S.cats[type]||[]).map(c=>c.n)}
+
+// ── Year helpers (ค.ศ. เริ่ม 2026 ไป 10 ปี) ──────────
+const START_YEAR=2026;
+const curYear=()=>new Date().getFullYear();
+// 2026, 2027, ... 2035 (10 ปี)
+function yearRange(){
+  const arr=[];
+  for(let y=START_YEAR+9;y>=START_YEAR;y--)arr.push(y);
+  return arr;
+}
+// สร้าง <option> ปี ค.ศ.
+function yearOptions(selectedVal){
+  return '<option value="all">ทุกปี</option>'+
+    yearRange().map(y=>`<option value="${y}" ${String(y)===String(selectedVal)?'selected':''}>${y}</option>`).join('');
+}
+// option สำหรับ form (ไม่มี "ทุกปี")
+function yearFormOptions(selectedVal){
+  return yearRange().map(y=>`<option value="${y}" ${String(y)===String(selectedVal)?'selected':''}>${y}</option>`).join('');
+}
 function destroyCharts(){Object.values(S.charts).forEach(c=>{try{c.destroy()}catch(e){}});S.charts={}}
 
 /* Period helpers */
@@ -601,8 +621,8 @@ function getPeriodTxns(period,ref){
 
 function periodLabel(period){
   const d=now();
-  if(period==='daily')return fDate(d,{weekday:'short',day:'numeric',month:'short'});
-  if(period==='weekly'){const dow=d.getDay();const mon=new Date(d);mon.setDate(d.getDate()-((dow+6)%7));return fDate(mon,{day:'numeric',month:'short'})+' – '+fDate(new Date(mon.getTime()+6*86400000),{day:'numeric',month:'short'})}
+  if(period==='daily')return fDate(d,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  if(period==='weekly'){const dow=d.getDay();const mon=new Date(d);mon.setDate(d.getDate()-((dow+6)%7));return fDate(mon,{day:'numeric',month:'short'})+' – '+fDate(new Date(mon.getTime()+6*86400000),{day:'numeric',month:'short',year:'numeric'})}
   if(period==='monthly')return d.toLocaleDateString('th-TH',{month:'long',year:'numeric'});
   if(period==='yearly')return String(d.getFullYear());
   return 'ทั้งหมด';
@@ -804,7 +824,19 @@ function renderAdd(){
         </div>
         <div class="fgrid">
           <div class="fg"><label>จำนวนเงิน (฿)</label><input type="number" id="fAmt" placeholder="0.00" value="${edit?edit.amount.toFixed(2):''}" min="0" step="0.01"></div>
-          <div class="fg"><label>วันที่</label><input type="date" id="fDate" value="${edit?edit.date:fdi(now())}"></div>
+          <div class="fg"><label>📅 วันที่ (พ.ศ.)</label>
+            <div style="display:flex;gap:5px">
+              <select id="fDay" style="flex:1;padding:.48rem .5rem;border-radius:var(--r1);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);font-size:12px;font-family:var(--font);outline:none">
+                ${Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${(edit?new Date(edit.date).getDate():now().getDate())===i+1?'selected':''}>${i+1}</option>`).join('')}
+              </select>
+              <select id="fMon" style="flex:1.4;padding:.48rem .5rem;border-radius:var(--r1);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);font-size:12px;font-family:var(--font);outline:none">
+                ${Array.from({length:12},(_,i)=>`<option value="${String(i+1).padStart(2,'0')}" ${(edit?new Date(edit.date).getMonth():now().getMonth())===i?'selected':''}>${new Date(2000,i).toLocaleDateString('th-TH',{month:'short'})}</option>`).join('')}
+              </select>
+              <select id="fYear" style="flex:1.8;padding:.48rem .5rem;border-radius:var(--r1);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);font-size:12px;font-family:var(--font);outline:none">
+                ${yearFormOptions(edit?new Date(edit.date).getFullYear():curYear())}
+              </select>
+            </div>
+          </div>
           <div class="fg"><label>หมวดหมู่</label><select id="fCat">${catOpts}</select></div>
           <div class="fg"><label>หมายเหตุ</label><input id="fNote" placeholder="(ไม่บังคับ)" value="${edit?edit.note:''}"></div>
           <div class="fg full"><label>สลิป / หลักฐาน</label>
@@ -842,7 +874,10 @@ function rmSlip(e){e.stopPropagation();pendingSlip=null;const a=document.getElem
 
 function saveEntry(){
   const amt=parseFloat(document.getElementById('fAmt').value);
-  const date=document.getElementById('fDate').value;
+  const day=document.getElementById('fDay')?.value;
+  const mon=document.getElementById('fMon')?.value;
+  const yr =document.getElementById('fYear')?.value;
+  const date=yr&&mon&&day?`${yr}-${mon}-${day}`:'';
   const cat=document.getElementById('fCat').value;
   const note=document.getElementById('fNote').value.trim();
   if(!amt||amt<=0){toast('กรุณากรอกจำนวนเงิน','err');return}
@@ -865,14 +900,13 @@ function saveEntry(){
    TRANSACTIONS
 ════════════════════════════════════════════ */
 function renderTxns(){
-  const years=[...new Set(S.txns.map(t=>new Date(t.date).getFullYear()))].sort((a,b)=>b-a);
   document.getElementById('pageContent').innerHTML=`
     <div class="card" style="overflow:hidden">
       <div class="sbar">
         <span style="color:var(--txt3);font-size:15px">🔍</span>
         <input type="text" id="ftQ" placeholder="ค้นหาหมวดหมู่ หรือหมายเหตุ…" oninput="applyF()">
         <select id="ftY" onchange="applyF()" style="border:none;background:none;font-size:11.5px;color:var(--txt2);font-family:var(--font);cursor:pointer;outline:none">
-          <option value="all">ทุกปี</option>${years.map(y=>`<option value="${y}">${y}</option>`).join('')}
+          ${yearOptions(S.filter.year)}
         </select>
       </div>
       <div class="ftags" id="ftags">
@@ -970,7 +1004,7 @@ function buildReport(){
       if(tx.length)rows.push({lbl:fDate(mon,{day:'numeric',month:'short'})+'–'+fDate(sun,{day:'numeric',month:'short'}),inc:sumT(tx,'income'),exp:sumT(tx,'expense'),cnt:tx.length});
     }
   }
-  else if(p==='monthly'){for(let i=11;i>=0;i--){const d=new Date(n.getFullYear(),n.getMonth()-i,1);const tx=S.txns.filter(t=>{const td=new Date(t.date);return td.getFullYear()===d.getFullYear()&&td.getMonth()===d.getMonth()});rows.push({lbl:d.toLocaleDateString('th-TH',{month:'long',year:'2-digit'}),inc:sumT(tx,'income'),exp:sumT(tx,'expense'),cnt:tx.length})}}
+  else if(p==='monthly'){for(let i=11;i>=0;i--){const d=new Date(n.getFullYear(),n.getMonth()-i,1);const tx=S.txns.filter(t=>{const td=new Date(t.date);return td.getFullYear()===d.getFullYear()&&td.getMonth()===d.getMonth()});rows.push({lbl:d.toLocaleDateString('th-TH',{month:'short',year:'numeric'}),inc:sumT(tx,'income'),exp:sumT(tx,'expense'),cnt:tx.length})}}
   else{const yrs=[...new Set(S.txns.map(t=>new Date(t.date).getFullYear()))].sort();yrs.forEach(y=>{const tx=S.txns.filter(t=>new Date(t.date).getFullYear()===y);rows.push({lbl:String(y),inc:sumT(tx,'income'),exp:sumT(tx,'expense'),cnt:tx.length})})}
 
   if(!rows.length&&p==='yearly'){const cx=getPeriodTxns('yearly');rows=[{lbl:String(n.getFullYear()),inc:sumT(cx,'income'),exp:sumT(cx,'expense'),cnt:cx.length}]}
