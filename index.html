@@ -455,15 +455,15 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       </div>
       <div class="nav-sec">
         <div class="nav-lbl">เมนูหลัก</div>
-        <div class="nav-item active" data-page="overview" data-tip="ภาพรวม"><em>🏠</em><span class="nav-text">ภาพรวม</span></div>
-        <div class="nav-item" data-page="add" data-tip="เพิ่มรายการ"><em>➕</em><span class="nav-text">เพิ่มรายการ</span></div>
-        <div class="nav-item" data-page="transactions" data-tip="รายการ"><em>📋</em><span class="nav-text">รายการทั้งหมด</span></div>
-        <div class="nav-item" data-page="reports" data-tip="รายงาน"><em>📊</em><span class="nav-text">รายงาน</span></div>
+        <div onclick="navTo('overview')" class="nav-item active" data-page="overview" data-tip="ภาพรวม"><em>🏠</em><span class="nav-text">ภาพรวม</span></div>
+        <div onclick="navTo('add')" class="nav-item" data-page="add" data-tip="เพิ่มรายการ"><em>➕</em><span class="nav-text">เพิ่มรายการ</span></div>
+        <div onclick="navTo('transactions')" class="nav-item" data-page="transactions" data-tip="รายการ"><em>📋</em><span class="nav-text">รายการทั้งหมด</span></div>
+        <div onclick="navTo('reports')" class="nav-item" data-page="reports" data-tip="รายงาน"><em>📊</em><span class="nav-text">รายงาน</span></div>
       </div>
       <div class="nav-sec">
         <div class="nav-lbl">จัดการ</div>
-        <div class="nav-item" data-page="categories" data-tip="หมวดหมู่"><em>🏷️</em><span class="nav-text">หมวดหมู่</span></div>
-        <div class="nav-item" data-page="settings" data-tip="ตั้งค่า"><em>⚙️</em><span class="nav-text">ตั้งค่า</span></div>
+        <div onclick="navTo('categories')" class="nav-item" data-page="categories" data-tip="หมวดหมู่"><em>🏷️</em><span class="nav-text">หมวดหมู่</span></div>
+        <div onclick="navTo('settings')" class="nav-item" data-page="settings" data-tip="ตั้งค่า"><em>⚙️</em><span class="nav-text">ตั้งค่า</span></div>
       </div>
       <div class="sb-footer">
         <div class="u-row">
@@ -507,6 +507,8 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div id="toasts"></div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+
 /* ════════════════════════════════════════════
    STATE
 ════════════════════════════════════════════ */
@@ -630,7 +632,7 @@ function lbOpen(src,txn){
 }
 function lbOpenById(id){const t=S.txns.find(x=>x.id===+id);if(t&&t.slipImg)lbOpen(t.slipImg,t)}
 function lbClose(){document.getElementById('lb').classList.remove('on')}
-document.getElementById('lb').addEventListener('click',e=>{if(e.target===document.getElementById('lb'))lbClose()});
+
 
 /* ════════════════════════════════════════════
    AUTH
@@ -651,7 +653,7 @@ function doLogout(){
   document.getElementById('loginPage').style.display='flex';
   document.getElementById('appPage').style.display='none';
 }
-document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+
 
 /* ════════════════════════════════════════════
    NAVIGATION
@@ -682,7 +684,6 @@ function sbToggleCol(){if(window.innerWidth<=900)return;sbCollapsed=!sbCollapsed
 function sbToggleMobile(){const sb=document.getElementById('sidebar'),ov=document.getElementById('sbOverlay');sb.classList.toggle('on');ov.classList.toggle('on')}
 function sbCloseMobile(){document.getElementById('sidebar').classList.remove('on');document.getElementById('sbOverlay').classList.remove('on')}
 function checkResp(){const w=window.innerWidth;document.getElementById('menuToggle').style.display=(w<=900&&w>600)?'':'none';if(w>900)sbCloseMobile()}
-window.addEventListener('resize',checkResp);checkResp();sbApply();
 
 /* ════════════════════════════════════════════
    OVERVIEW
@@ -1246,6 +1247,34 @@ function seedData(){
    THEME
 ════════════════════════════════════════════ */
 function toggleTheme(){const h=document.documentElement;h.setAttribute('data-theme',h.getAttribute('data-theme')==='dark'?'':'dark')}
+
+/* ════════════════════════════════════════════
+   INIT — wire up everything after DOM ready
+════════════════════════════════════════════ */
+// Login enter key
+document.getElementById('lp').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doLogin();
+});
+
+// Lightbox close on backdrop
+document.getElementById('lb').addEventListener('click', function(e) {
+  if (e.target === this) lbClose();
+});
+
+// Responsive check
+function checkResp() {
+  var w = window.innerWidth;
+  var btn = document.getElementById('menuToggle');
+  if (btn) btn.style.display = (w <= 900 && w > 600) ? '' : 'none';
+  if (w > 900) sbCloseMobile();
+}
+window.addEventListener('resize', checkResp);
+checkResp();
+
+// Sidebar collapse state
+sbApply();
+
+}); // end DOMContentLoaded
 </script>
 </body>
 </html>
