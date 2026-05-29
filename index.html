@@ -1251,19 +1251,16 @@ function toggleTheme(){const h=document.documentElement;h.setAttribute('data-the
 /* ════════════════════════════════════════════
    INIT — runs after DOM is ready
 ════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', function() {
-  ════════════════════════════════════════════ */
-// Login enter key
+
+// ── Init ──
 document.getElementById('lp').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') doLogin();
 });
 
-// Lightbox close on backdrop
 document.getElementById('lb').addEventListener('click', function(e) {
   if (e.target === this) lbClose();
 });
 
-// Responsive check
 function checkResp() {
   var w = window.innerWidth;
   var btn = document.getElementById('menuToggle');
@@ -1272,10 +1269,7 @@ function checkResp() {
 }
 window.addEventListener('resize', checkResp);
 checkResp();
-
-// Sidebar collapse state
 sbApply();
-});
 </script>
 </body>
 </html>
